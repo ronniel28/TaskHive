@@ -18,8 +18,8 @@ class TaskFactory extends Factory
     public function definition(): array
     {
         return [
-            'user_id' => 2, 
-            'parent_task_id' => 21,
+            'user_id' => 1, 
+            'parent_task_id' => 3,
             'title' => $this->faker->unique()->sentence(3), // Generates a unique title of 3 words
             'content' => $this->faker->paragraph, // Random content paragraph
             'status' => $this->faker->randomElement(['to-do', 'in-progress', 'done']), // Random status

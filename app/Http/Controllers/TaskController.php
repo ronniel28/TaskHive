@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\TaskRequest;
 use App\Jobs\DeleteExpiredTaskJob;
 use App\Models\Task;
 use Illuminate\Http\Request;
@@ -10,50 +11,151 @@ use Illuminate\Support\Facades\Storage;
 
 class TaskController extends Controller
 {
-    public function tasks(Request $request)
+    use \Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+    public function index(Request $request)
     {
-        $perPage = $request->get('per_page', 10); 
-        $query = Task::where('user_id', auth()->id())
-        ->whereNull('parent_task_id'); // Filter only parent tasks upfront
-    
-    // Apply search filter if a search term is provided
-    if ($request->filled('search')) {
+        // dd($request->input('search'));
+        $perPage = $request->get('per_page', 10);
+
+        $page = $request->get('page');
+
+        $status = $request->get('status');
+
         $search = $request->input('search');
-        $query->where('title', 'like', '%' . $search . '%');
-    }
-    
-    // Apply status filter
-    if ($request->filled('status')) {
-        $status = $request->input('status');
-    
-        if ($status === 'draft') {
-            $query->where('is_draft', true);
-        } elseif ($status === 'trash') {
-            $query->onlyTrashed();
-        } else {
-            $query->where('status', $status)
-                  ->where('is_draft', false);
+
+        $query = auth()->user()->tasks()->whereNull('parent_task_id');
+
+
+
+        if($status){
+            $query->where('status', $status);
         }
-    } else {
-        // Default to non-draft tasks when status is not specified
-        $query->where('is_draft', false);
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', '%' . $search . '%')
+                ->orWhere('content', 'like', '%' . $search . '%')
+                ->orWhereHas('subtasks', function ($subQuery) use ($search) {
+                    $subQuery->where('title', 'like', '%' . $search . '%');
+                });
+            });
+        }
+
+        $tasks = $query->paginate($perPage);
+
+        $tasks->appends([
+            'status' => $request->get('status'),
+            'page' => $page,
+            'per_page' => $perPage,
+            'search' => $search
+        ]);
+
+        return view('tasks.index', compact('tasks'));
     }
 
-    if ($request->has('order_by')) {
-        if ($request->input('order_by') == 'title') {
-            $query->orderBy('title', 'asc');  // Ascending order for title (alphabetically)
-        } elseif ($request->input('order_by') == 'created_at') {
-            $query->orderBy('created_at', 'desc'); // Descending order for created_at (latest first)
+    public function show(Request $request, Task $task) 
+    {
+        // dd($task);
+        $perPage = $request->get('per_page', 10);
+
+        $page = $request->get('page');
+
+        $status = $request->get('status');
+
+        $search = $request->input('search');
+
+        $this->authorize('view', $task);
+
+        $query = $task->subtasks();
+
+        if($status){
+            $query->where('status', $status);
         }
-    } else {
-        // Default order if no sorting is applied
-        $query->orderBy('created_at', 'desc'); // Sort by date created (newest first)
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', '%' . $search . '%')
+                ->orWhere('content', 'like', '%' . $search . '%');
+            });
+        }
+
+        $subtasks = $query->paginate($perPage);
+
+        $subtasks->appends([
+            'status' => $status,
+            'page' => $page,
+            'per_page' => $perPage,
+            'search' => $search
+        ]);
+
+        return view('tasks.show', compact('task', 'subtasks'));
     }
-    
-    // Paginate the results
-    $tasks = $query->paginate($perPage);
-    
-    return view('tasks.index', compact('tasks'));
+
+    public function edit(Task $task)
+    {
+        $parentTaskId = $task->parent_task_id;
+        $this->authorize('edit', $task);
+        return view('tasks.edit', compact('task', 'parentTaskId'));
+    }
+
+    public function create(Request $request)
+    {
+        // dd($request->all());
+        $parentTaskId = $request->input('task');
+        // dd($parentTaskId);
+        return view('tasks.add', compact('parentTaskId'));
+    }
+
+    public function store(TaskRequest $request)
+    {
+        // dd($request->all());
+        $parentTaskId = $request->input('parent_task_id');
+
+        $validatedData = $request->validated();
+
+        if ($request->hasFile('image_path')) {
+            $path = $request->file('image_path')->store('attachments', 'public');
+            $validatedData['image_path'] = $path;
+        }
+
+        $task = Task::create($validatedData);
+
+        $task->parent_task_id = $request->input('parent_task_id');
+
+        $task->save();
+
+        return redirect()->route($parentTaskId ? 'tasks.show' : 'tasks.index', $parentTaskId ?? [])->with('success', 'Task created successfully.');
+    }
+
+    public function update(TaskRequest $request, Task $task)
+    {
+        $this->authorize('update', $task);
+        // $this->authorize('update', $task);
+        $validatedData = $request->validated();
+     
+        // Check if a new image was uploaded
+        if ($request->hasFile('image_path')) {
+            // Delete the old image if it exists
+            if ($task->image_path && file_exists(storage_path('app/public/' . $task->image_path))) {
+                unlink(storage_path('app/public/' . $task->image_path)); // Delete the old image
+            }
+
+            // Store the new image and update the image path in the validated data
+            $validatedData['image_path'] = $request->file('image_path')->store('attachments', 'public');
+        }
+        
+        $task->update($validatedData);
+
+        return redirect()->route('tasks.show', $task->parent_task_id ? $task->parent_task_id : $task)->with('success', 'Task updated successfully.');
+    }
+
+    public function toggleDraft(Task $task)
+    {
+        
+        $task->is_draft = !$task->is_draft;
+        $task->save();
+
+        return redirect()->route('tasks.show', $task)->with('success', 'Task updated successfully.');
     }
 
 

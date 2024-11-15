@@ -8,24 +8,27 @@ Route::get('/', function () {
     return view('home');
 })->name('home');
 
+// Group all authenticated routes
 Route::middleware('auth')->group(function () {
 
-    Route::get('/tasks', [TaskController::class, 'tasks'])->name('tasks');
-    Route::get('/task/{id}', [TaskController::class, 'manageTask'])->name('task.manage'); //manage-task
-    Route::get('/tasks/add', [TaskController::class, 'addTask'])->name('task.add'); //add-task
-    Route::get('/task/{id}/edit', [TaskController::class, 'editTask'])->name('task.edit'); //update-task
-    Route::post('/tasks', [TaskController::class, 'storeTask'])->name('task.store'); //store-task
-    Route::put('/task/{id}', [TaskController::class, 'updateTask'])->name('task.update');
+    // Task routes
+    Route::resource('tasks', TaskController::class)->except([ 'destroy']);
+    Route::patch('/tasks/{task}/toggle-draft', [TaskController::class, 'toggleDraft'])->name('tasks.toggleDraft');
+    // Route::get('/task/{id}/edit', [TaskController::class, 'editTask'])->name('tasks.edit');
+    // Route::put('/task/{id}', [TaskController::class, 'updateTask'])->name('tasks.update');
+    // Route::delete('/task/{id}/force-delete', [TaskController::class, 'forceDelete'])->name('tasks.force-delete');
 
-    Route::get('/task/{id}/add-subtask', [TaskController::class, 'addSubtask'])->name('subtask.add');
-    Route::get('/task/{id}/subtask/{subId}/edit', [TaskController::class, 'editSubtask'])->name('subtask.edit');
+    // // Subtask routes grouped under task
+    // Route::prefix('task/{taskId}/subtask')->group(function () {
+    //     Route::get('add', [TaskController::class, 'addSubtask'])->name('subtask.add');
+    //     Route::get('{subId}/edit', [TaskController::class, 'editSubtask'])->name('subtask.edit');
+    //     Route::patch('{subId}/update-status', [TaskController::class, 'updateStatus'])->name('subtask.update-status');
+    // });
 
-    Route::delete('/tasks/{id}/trash', [TaskController::class, 'trash'])->name('task.trash');
-
-    Route::patch('task/{id}/subtask/{subId}/update-status', [TaskController::class, 'updateStatus'])->name('subtask.update-status');
-    Route::patch('/tasks/{id}/restore', [TaskController::class, 'restoreTask'])->name('task.restore');
-    Route::delete('/tasks/{id}/force-delete', [TaskController::class, 'forceDelete'])->name('task.force-delete');
+    // // Trash and restore task routes
+    // Route::patch('task/{id}/restore', [TaskController::class, 'restoreTask'])->name('tasks.restore');
+    // Route::delete('task/{id}/trash', [TaskController::class, 'trash'])->name('tasks.trash');
 });
 
-
 require __DIR__.'/auth.php';
+

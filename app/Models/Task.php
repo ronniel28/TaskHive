@@ -49,4 +49,21 @@ class Task extends Model
             $this->save();
         }
     }
+
+    public function scopeSearchByTitle($query, $title)
+    {
+        return $query->where('title', 'like', '%' . $title . '%');
+    }
+
+    public function scopeFilterByStatus($query, $status)
+    {
+        if ($status === 'draft') {
+            return $query->where('is_draft', true);
+        } elseif ($status === 'trash') {
+            return $query->onlyTrashed();
+        }
+
+        return $query->where('status', $status)
+                     ->where('is_draft', false);
+    }
 }
