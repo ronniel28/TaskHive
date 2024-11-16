@@ -33,13 +33,20 @@ class TaskRequest extends FormRequest
      */
     public function rules(): array
     {
+        if ($this->isMethod('patch') && $this->routeIs('tasks.updateTaskStatus')) {
+            return [
+                'status' => 'required|in:to-do,in-progress,done',
+            ];
+        }
+
         return [
                 'user_id' => 'required|exists:users,id',
                 'title' => 'required|max:100',
                 'content' => 'required',
                 'status' => 'required|in:to-do,in-progress,done',
                 'image_path' => 'nullable|image|max:4096',
-                'parent_task_id' => 'nullable|exists:tasks,id'
+                'parent_task_id' => 'nullable|exists:tasks,id',
+                'is_draft' => 'required|boolean'
         ];
     }
 }

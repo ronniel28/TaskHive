@@ -64,7 +64,25 @@
         @endif
     </div>
 
-    <a href="{{ route('tasks.create', ['task' => $task]) }}" class="btn btn-success">Add Subtask</a>
+    <div class="d-flex gap-2">
+        <!-- Dropdown to Update Task Status -->
+        @if ($subtasks->isEmpty())
+            <form action="{{ route('tasks.updateTaskStatus', $task) }}" method="POST" class="d-flex align-items-center">
+                @csrf
+                @method('PATCH')
+                <div class="form-group me-2">
+                    <label for="statusDropdown" class="visually-hidden">Update Parent Task Status</label>
+                    <select id="statusDropdown" class="form-select form-select-sm" name="status" onchange="this.form.submit()">
+                        <option value="to-do" {{ $task->status == 'to-do' ? 'selected' : '' }}>To Do</option>
+                        <option value="in-progress" {{ $task->status == 'in-progress' ? 'selected' : '' }}>In Progress</option>
+                        <option value="done" {{ $task->status == 'done' ? 'selected' : '' }}>Done</option>
+                    </select>
+                </div>
+            </form>
+        @endif
+        <!-- Add Subtask Button -->
+        <a href="{{ route('tasks.create', ['task' => $task]) }}" class="btn btn-success">Add Subtask</a>
+    </div>
 </div>
 
 <div class="container mt-4">
@@ -94,61 +112,50 @@
     </div>
 </div>
 
-<table class="table table-striped table-bordered table-hover">
-    <thead class="table-dark">
-        <tr>
-            <th scope="col">Title</th>
-            <th scope="col">Image</th>
-            <th scope="col">Content</th>
-            <th scope="col">Status</th>
-            <th scope="col">Action</th>
-        </tr>
-    </thead>
-    <tbody class="table-group-divider">
-        @foreach ($subtasks as $task)
-        <tr>
-            <td>{{ $task->title }}</td>
-            <td>
-                <div class="text-center">
-                    <img src="{{ $task->image_path ? asset('storage/' . $task->image_path) : 'https://via.placeholder.com/150' }}" 
-                         alt="Attachment" 
-                         class="img-fluid rounded" 
-                         style="max-width: 150px; max-height: 150px; width: 100%; height: auto;">
-                </div>
-            </td>
-            <td>
-                <div class="text-truncate" style="max-width: 250px;">
-                    {{ $task->content }}
-                </div>
-            </td>
-            <td>
-                <span class="badge 
-                    @if($task->status == 'done') bg-success 
-                    @elseif($task->status == 'in-progress') bg-warning 
-                    @else bg-secondary @endif">
-                    {{ ucfirst($task->status) }}
-                </span>
-            </td>
-            @if (request('status') == 'trash')
+@if ($subtasks->isEmpty())
+    <div class="alert alert-info text-center">
+        <p>No subtasks available for this task. Click "Add Subtask" to create one!</p>
+    </div>
+@else
+    <table class="table table-striped table-bordered table-hover">
+        <thead class="table-dark">
+            <tr>
+                <th scope="col">Title</th>
+                <th scope="col">Image</th>
+                <th scope="col">Content</th>
+                <th scope="col">Status</th>
+                <th scope="col">Action</th>
+            </tr>
+        </thead>
+        <tbody class="table-group-divider">
+            @foreach ($subtasks as $task)
+            <tr>
+                <td>{{ $task->title }}</td>
                 <td>
-                    <div class="d-flex gap-2 justify-content-center">
-                        <form action="" method="POST" class="d-inline">
-                            @csrf
-                            @method('PATCH')
-                            <button type="submit" class="btn btn-success btn-sm">Restore</button>
-                        </form>
-                        <form action="" method="POST" class="d-inline">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="btn btn-danger btn-sm">Delete Permanently</button>
-                        </form>
+                    <div class="text-center">
+                        <img src="{{ $task->image_path ? asset('storage/' . $task->image_path) : 'https://via.placeholder.com/150' }}" 
+                             alt="Attachment" 
+                             class="img-fluid rounded" 
+                             style="max-width: 150px; max-height: 150px; width: 100%; height: auto;">
                     </div>
                 </td>
-            @else
+                <td>
+                    <div class="text-truncate" style="max-width: 250px;">
+                        {{ $task->content }}
+                    </div>
+                </td>
+                <td>
+                    <span class="badge 
+                        @if($task->status == 'done') bg-success 
+                        @elseif($task->status == 'in-progress') bg-warning 
+                        @else bg-secondary @endif">
+                        {{ ucfirst($task->status) }}
+                    </span>
+                </td>
                 <td>
                     <div class="d-flex justify-content-start align-items-center gap-2">
                         <a href="{{ route('tasks.edit', $task->id) }}" class="btn btn-warning btn-sm">Edit</a>
-                        <form action="" method="POST" class="d-flex">
+                        <form action="{{ route('tasks.updateTaskStatus', $task) }}" method="POST" class="d-flex">
                             @csrf
                             @method('PATCH')
                             <div class="form-group me-2">
@@ -159,36 +166,37 @@
                                 </select>
                             </div>
                         </form>
-                        <form action="" method="POST">
+                        <form action="{{ route('tasks.delete', $task) }}" method="POST">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                         </form>
                     </div>
                 </td>
-            @endif
-        </tr>
-        @endforeach
-    </tbody>
-</table>
-<div class="d-flex justify-content-center">
-    <ul class="pagination pagination-sm">
-        {{-- Previous Button --}}
-        <li class="page-item {{ $subtasks->onFirstPage() ? 'disabled' : '' }}">
-            <a class="page-link" href="{{ $subtasks->previousPageUrl() }}" tabindex="-1">Previous</a>
-        </li>
-
-        {{-- Page Numbers --}}
-        @for ($i = 1; $i <= $subtasks->lastPage(); $i++)
-            <li class="page-item {{ $subtasks->currentPage() == $i ? 'active' : '' }}">
-                <a class="page-link" href="{{ $subtasks->url($i) }}">{{ $i }}</a>
+            </tr>
+            @endforeach
+        </tbody>
+    </table>
+    <div class="d-flex justify-content-center">
+        <ul class="pagination pagination-sm">
+            {{-- Previous Button --}}
+            <li class="page-item {{ $subtasks->onFirstPage() ? 'disabled' : '' }}">
+                <a class="page-link" href="{{ $subtasks->previousPageUrl() }}" tabindex="-1">Previous</a>
             </li>
-        @endfor
+    
+            {{-- Page Numbers --}}
+            @for ($i = 1; $i <= $subtasks->lastPage(); $i++)
+                <li class="page-item {{ $subtasks->currentPage() == $i ? 'active' : '' }}">
+                    <a class="page-link" href="{{ $subtasks->url($i) }}">{{ $i }}</a>
+                </li>
+            @endfor
+    
+            {{-- Next Button --}}
+            <li class="page-item {{ $subtasks->hasMorePages() ? '' : 'disabled' }}">
+                <a class="page-link" href="{{ $subtasks->nextPageUrl() }}">Next</a>
+            </li>
+        </ul>
+    </div>
+@endif
 
-        {{-- Next Button --}}
-        <li class="page-item {{ $subtasks->hasMorePages() ? '' : 'disabled' }}">
-            <a class="page-link" href="{{ $subtasks->nextPageUrl() }}">Next</a>
-        </li>
-    </ul>
-</div>
 @endsection

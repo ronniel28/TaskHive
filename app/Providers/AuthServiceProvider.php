@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Task;
 use App\Policies\TaskPolicy;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AuthServiceProvider extends ServiceProvider
@@ -29,6 +30,6 @@ class AuthServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Gate::define('restore-task', [TaskPolicy::class, 'restore']);
     }
 }

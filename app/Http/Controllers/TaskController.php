@@ -7,7 +7,9 @@ use App\Jobs\DeleteExpiredTaskJob;
 use App\Models\Task;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 
 class TaskController extends Controller
 {
@@ -23,7 +25,7 @@ class TaskController extends Controller
 
         $search = $request->input('search');
 
-        $query = auth()->user()->tasks()->whereNull('parent_task_id');
+        $query = auth()->user()->tasks()->where('is_draft', 0)->whereNull('parent_task_id');
 
 
 
@@ -66,7 +68,7 @@ class TaskController extends Controller
 
         $this->authorize('view', $task);
 
-        $query = $task->subtasks();
+        $query = $task->subtasks()->where('is_draft', 0);
 
         if($status){
             $query->where('status', $status);
@@ -98,17 +100,26 @@ class TaskController extends Controller
         return view('tasks.edit', compact('task', 'parentTaskId'));
     }
 
-    public function create(Request $request)
+    public function create(Request $request, Task $task)
     {
-        // dd($request->all());
-        $parentTaskId = $request->input('task');
-        // dd($parentTaskId);
+        // dd($task->title);
+        $parentTaskId = $request->query('task');
+   
+        // Find the task
+        $task = Task::find($parentTaskId);
+        
+            // Use the policy to check if the authenticated user can create a task based on the given task
+        if (!$task || !Gate::allows('create', $task)) {
+            return redirect()->route('tasks.index')->with('error', 'You cannot create a task with this task.');
+        }
+
+
         return view('tasks.add', compact('parentTaskId'));
     }
 
     public function store(TaskRequest $request)
     {
-        // dd($request->all());
+
         $parentTaskId = $request->input('parent_task_id');
 
         $validatedData = $request->validated();
@@ -122,7 +133,13 @@ class TaskController extends Controller
 
         $task->parent_task_id = $request->input('parent_task_id');
 
+
         $task->save();
+
+
+        if($task->parent_task_id) {
+            $task->parentTask->updateProgress();
+        }
 
         return redirect()->route($parentTaskId ? 'tasks.show' : 'tasks.index', $parentTaskId ?? [])->with('success', 'Task created successfully.');
     }
@@ -143,6 +160,10 @@ class TaskController extends Controller
             // Store the new image and update the image path in the validated data
             $validatedData['image_path'] = $request->file('image_path')->store('attachments', 'public');
         }
+
+        if($task->parent_task_id) {
+            $task->parentTask->updateProgress();
+        }
         
         $task->update($validatedData);
 
@@ -151,227 +172,87 @@ class TaskController extends Controller
 
     public function toggleDraft(Task $task)
     {
-        
+        $url = parse_url(URL::previous(), PHP_URL_PATH);
+        $baseUrl = url($url);
         $task->is_draft = !$task->is_draft;
         $task->save();
 
-        return redirect()->route('tasks.show', $task)->with('success', 'Task updated successfully.');
-    }
-
-
-    public function manageTask(Request $request, $id)
-    {
-        $task = Task::where('user_id', auth()->user()->id)->findOrFail($id);
-        $task->updateProgress();
-
-        if (!$task) {
-            abort(404, 'Task not found or you do not have permission to view it.');
-        }    
-       
-        $subtasksQuery = $task->subtasks();
-
-        if ($request->has('status') && $request->input('status')) {
-            $status = $request->input('status');
-            
-            if ($status === 'draft') {
-                $subtasksQuery->where('is_draft', true); // Filter by draft status
-            } else if($status === 'trash') {
-                $subtasksQuery->onlyTrashed();
-            } else {
-                $subtasksQuery->where('status', $status)  // Filter by specific status
-                              ->where('is_draft', false); // Ensure not a draft
-            }
+        if ($baseUrl === route('tasks.drafts')) {
+            return redirect()->route('tasks.drafts')->with('success', 'Draft updated successfully.');
         } else {
-            $subtasksQuery->where('is_draft', false); // Default: only non-draft subtasks
+            return redirect()->route('tasks.show', $task)->with('success', 'Task updated successfully.');
         }
-
-        if ($request->has('order_by')) {
-            if ($request->input('order_by') == 'title') {
-                $subtasksQuery->orderBy('title', 'asc');  // Ascending order for title (alphabetically)
-            } elseif ($request->input('order_by') == 'created_at') {
-                $subtasksQuery->orderBy('created_at', 'desc'); // Descending order for created_at (latest first)
-            }
-        } else {
-            // Default order if no sorting is applied
-            $subtasksQuery->orderBy('created_at', 'desc'); // Sort by date created (newest first)
-        }
-
-        $subtasks = $subtasksQuery->paginate(10);
-    
-        //dd($task->subtasks->onFirstPage());
-        return view('tasks.task', compact('task', 'subtasks'));
         
     }
 
-    public function addTask()
+    public function updateTaskStatus(TaskRequest $request, Task $task)
     {
-        return view('tasks.add');
+        // Update only the status field
+        $task->update($request->validated());
+
+        if($task->parent_task_id) {
+            $task->parentTask->updateProgress();
+        }
+
+        // Redirect back with a success message
+        return redirect()->back()->with('success', 'Task status updated successfully.');
     }
 
-    public function storeTask(Request $request)
+    public function drafts()
     {
-        // dd($request->all());
-        $request->validate([
-            'title' => 'required|max:100',
-            'content' => 'required',
-            'status' => 'required|in:to-do,in-progress,done',
-            'image_path' => 'nullable|image|max:4096',
-            'parent_task_id' => 'nullable|exists:tasks,id'
-        ]);
-
-        $task = new Task();
-        $task->user_id = Auth::id();
-        $task->title = $request->title;
-        $task->content = $request->content;
-        $task->status = $request->status;
-        $task->is_draft = $request->has('is_draft') ? 1 : 0;
-
-        if ($request->hasFile('image_path')) {
-            $path = $request->file('image_path')->store('attachments', 'public');
-            $task->image_path = $path;
-        }
-
-        $task->parent_task_id = $request->input('parent_task_id');
-
-        $task->save();
-
-        if($request->input('parent_task_id')){
-            return redirect()->route('task.manage', ['id' => $request->input('parent_task_id')])->with('success', 'Task added successfully.');
-        }else{
-            return redirect()->route('tasks')->with('success', 'Task added successfully.');
-        }
-
-
+        $tasks = auth()->user()->tasks()->where('is_draft', 0)->paginate(10);
+        return view('tasks.drafts', compact('tasks'));
     }
 
-    public function editTask(Request $request, $id)
+    public function trash()
     {
-        $task = Task::where('id', $id)->where('user_id', auth()->id())->firstOrFail();
-        // dd($task);
-        
-        return view('tasks.update', compact('task'));
+        $tasks = auth()->user()->tasks()->onlyTrashed()->paginate(10);
+        return view('tasks.trash', compact('tasks'));
     }
 
-    public function updateTask(Request $request, $id)
+    public function moveToTrash(Task $task)
     {
-        // dd($request->all());
-        $task = Task::where('id', $id)->where('user_id', auth()->id())->firstOrFail();
-        $validated = $request->validate([
-            'title' => 'required|unique:tasks,title,'.$task->id.'|max:100',
-            'content' => 'required',
-            'status' => 'required|in:to-do,in-progress,done',
-            'image_path' => 'nullable|image|max:4096', // Validate the attachment as an image, max 4MB
-            'parent_task_id' => 'nullable|exists:tasks,id',
-        ]);
-    
-        $task->fill($validated);
-    
-        // Handle the file upload
-        if ($request->hasFile('image_path')) {
-            // Delete old attachment if it exists
-            if ($task->image_path) {
-                Storage::disk('public')->delete($task->image_path);
-            }
-            
-            $path = $request->file('image_path')->store('attachments', 'public');
-            $task->image_path = $path;
-        }
-
-        $task->parent_task_id = $request->input('parent_task_id');
-        $task->is_draft = $request->input('is_draft') ? (int)$request->input('is_draft') : 0;
-        $task->save();
-    
-        if($request->input('parent_task_id')){
-            return redirect()->route('task.manage', ['id' => $request->input('parent_task_id')])->with('success', 'Task updated successfully.');
-        }else{
-            return redirect()->route('tasks')->with('success', 'Task updated successfully.');
-        }
-    
-    }
-
-    public function addSubtask(Request $request, $id)
-    {
-        // Find the parent task and ensure it belongs to the authenticated user
-        $parentTask = Task::where('id', $id)
-            ->where('user_id', auth()->id())
-            ->first();
-        
-        if (!$parentTask) {
-            abort(404, 'Task not found or you do not have permission to edit this task.');
-        }
-
-        $parentTaskId = (int)$id;
-        return view('tasks.add-subtask', compact('parentTaskId'));
-    }
-
-    public function editSubtask(Request $request, $id, $subId)
-    {
-
-        $task = Task::where('id', (int)$subId)
-                    ->where('user_id', auth()->id())
-                    ->first();
-
-        if (!$task) {
-            abort(404, 'Task not found or you do not have permission to edit this task.');
-        }
-
-        $parentTask = Task::where('id', $id)
-                        ->where('user_id', auth()->id())
-                        ->first();
-
-        if (!$parentTask) {
-            abort(404, 'Parent task not found or does not belong to you.');
-        }
-
-        // Ensure the task is a subtask of the given parent_task_id if provided
-        if ((int)$task->parent_task_id !== (int)$id) {
-            abort(404, 'This task is not a subtask of the specified parent task.');
-        }
-
-        // Ensure the parent task is not the same as the task itself
-        if ((int)$task->id === (int)$id) {
-            abort(404, 'A task cannot be its own parent.');
-        }
-                    
-                
-        $parentTaskId = (int)$id;
-
-        return view('tasks.update-subtask', compact('task', 'parentTaskId'));
-    }
-
-    public function trash(Request $request,$id)
-    {
-        // dd($request->all());
-        $task = Task::where('id',(int)$id)->where('user_id', auth()->id())->firstOrFail();
         $task->delete();
+        return redirect()->back()->with('success', 'Task soft deleted successfully.'); 
+    }
+    
+    public function restore($taskId)
+    {
+   
+      // Use withTrashed() to include soft-deleted tasks
+      $task = Task::withTrashed()->find($taskId);
 
-        if($request->input('subtask')){
-            return redirect()->back()->with('success', 'Task soft deleted successfully.'); 
-        }else{
-            return redirect()->route('tasks')->with('success', 'Task soft deleted successfully.');
-        }
+      if (!$task) {
+          return redirect()->route('tasks.drafts')->with('error', 'Task not found.');
+      }
+  
+      if ($task->trashed()) {
+          $this->authorize('restore', $task);
+  
+          $task->restore();
+          return redirect()->route('tasks.trash')->with('success', 'Task restored successfully.');
+      }
+  
+      return redirect()->route('tasks.trash')->with('error', 'Task is not soft-deleted.');
+  
     }
 
-    public function restoreTask(Request $request,$id)
+    public function forceDelete($taskId)
     {
-        $task = Task::onlyTrashed()->where('id',(int)$id)->where('user_id', auth()->id())->firstOrFail();
-        $task->restore(); // Restore the soft-deleted task
-        if($request->input('subtask')){
-            return redirect()->back()->with('success', 'Task soft deleted successfully.'); 
-        }else{
-            return redirect()->route('tasks')->with('success', 'Task soft deleted successfully.');
-        }
-    }
+         // Find the task, including soft-deleted tasks
+        $task = Task::withTrashed()->find($taskId);
 
-    public function forceDelete(Request $request,$id)
-    {
-        $task = Task::onlyTrashed()->where('id',(int)$id)->where('user_id', auth()->id())->firstOrFail();
-        $task->forceDelete(); // Permanently delete the task
-        if($request->input('subtask')){
-            return redirect()->back()->with('success', 'Task soft deleted successfully.'); 
-        }else{
-            return redirect()->route('tasks')->with('success', 'Task soft deleted successfully.');
+        // If task is not found, redirect with an error message
+        if (!$task) {
+            return redirect()->route('tasks.drafts')->with('error', 'Task not found.');
         }
+
+        // Force delete the task (permanently delete it)
+        $task->forceDelete();
+
+        // Redirect back with a success message
+        return redirect()->route('tasks.drafts')->with('success', 'Task permanently deleted.');
+       
     }
 
     public function updateStatus(Request $request, $id, $subId)

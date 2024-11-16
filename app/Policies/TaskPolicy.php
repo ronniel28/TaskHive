@@ -27,9 +27,9 @@ class TaskPolicy
     /**
      * Determine whether the user can create models.
      */
-    public function create(User $user): bool
+    public function create(User $user, Task $task): bool
     {
-       
+        return $task->user_id === $user->id;
     }
 
     /**
@@ -45,7 +45,7 @@ class TaskPolicy
      */
     public function delete(User $user, Task $task): bool
     {
-        return $user->id === $task->user_id;
+        // return $user->id === $task->user_id;
     }
 
     public function edit(User $user, Task $task)
@@ -59,7 +59,7 @@ class TaskPolicy
      */
     public function restore(User $user, Task $task): bool
     {
-        //
+        return $user->id === $task->user_id; 
     }
 
     /**

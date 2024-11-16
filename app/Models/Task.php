@@ -38,8 +38,8 @@ class Task extends Model
 
     public function updateProgress()
     {
-        $totalSubtasks = $this->subtasks()->count();
-        $completedSubtasks = $this->subtasks()->where('status', 'done')->count();
+        $totalSubtasks = $this->subtasks()->where('is_draft',0)->count();
+        $completedSubtasks = $this->subtasks()->where('is_draft',0)->where('status', 'done')->count();
 
         if ($totalSubtasks > 0 && $totalSubtasks == $completedSubtasks) {
             $this->status = 'done';
