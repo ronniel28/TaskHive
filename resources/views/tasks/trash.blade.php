@@ -3,7 +3,6 @@
 @section('title', 'Trash') <!-- This should override the default title -->
 
 @section('content')
-
 <header class="container my-4 p-4 border rounded bg-light position-relative">
     <div class="row align-items-center">
         <div class="col-md-8">
