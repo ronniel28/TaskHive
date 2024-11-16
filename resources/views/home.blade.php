@@ -1,11 +1,11 @@
-@extends('layouts.task-app')
+@extends('layouts.app')
 
 @section('content')
 <section class="hero bg-primary text-white text-center py-5">
     <div class="container">
       <h1 class="display-4">Effortlessly Manage Your Tasks</h1>
       <p class="lead">Stay organized and boost productivity with our simple task management app.</p>
-      <a href="{{ route('tasks') }}" class="btn btn-light btn-lg">Get Started</a>
+      <a href="{{ route('tasks.index') }}" class="btn btn-light btn-lg">Get Started</a>
     </div>
   </section>
 

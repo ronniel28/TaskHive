@@ -8,24 +8,31 @@ Route::get('/', function () {
     return view('home');
 })->name('home');
 
+// Group all authenticated routes
 Route::middleware('auth')->group(function () {
 
-    Route::get('/tasks', [TaskController::class, 'tasks'])->name('tasks');
-    Route::get('/task/{id}', [TaskController::class, 'manageTask'])->name('task.manage'); //manage-task
-    Route::get('/tasks/add', [TaskController::class, 'addTask'])->name('task.add'); //add-task
-    Route::get('/task/{id}/edit', [TaskController::class, 'editTask'])->name('task.edit'); //update-task
-    Route::post('/tasks', [TaskController::class, 'storeTask'])->name('task.store'); //store-task
-    Route::put('/task/{id}', [TaskController::class, 'updateTask'])->name('task.update');
+   // Restore Task Route (specific route before resource)
+    Route::patch('tasks/{task}/restore', [TaskController::class, 'restore'])->name('tasks.restore');
 
-    Route::get('/task/{id}/add-subtask', [TaskController::class, 'addSubtask'])->name('subtask.add');
-    Route::get('/task/{id}/subtask/{subId}/edit', [TaskController::class, 'editSubtask'])->name('subtask.edit');
+    // Tasks Drafts Route
+    Route::get('/tasks/drafts', [TaskController::class, 'drafts'])->name('tasks.drafts');
 
-    Route::delete('/tasks/{id}/trash', [TaskController::class, 'trash'])->name('task.trash');
+    // Tasks Trash Route
+    Route::get('/tasks/trash', [TaskController::class, 'trash'])->name('tasks.trash');
 
-    Route::patch('task/{id}/subtask/{subId}/update-status', [TaskController::class, 'updateStatus'])->name('subtask.update-status');
-    Route::patch('/tasks/{id}/restore', [TaskController::class, 'restoreTask'])->name('task.restore');
-    Route::delete('/tasks/{id}/force-delete', [TaskController::class, 'forceDelete'])->name('task.force-delete');
+    // Resourceful Route for Tasks (excluding destroy)
+    Route::resource('tasks', TaskController::class)->except(['destroy']);
+
+    // Toggle Draft Route
+    Route::patch('/tasks/{task}/toggle-draft', [TaskController::class, 'toggleDraft'])->name('tasks.toggleDraft');
+
+    // Delete Task (move to trash)
+    Route::delete('tasks/{task}', [TaskController::class, 'moveToTrash'])->name('tasks.delete');
+
+    Route::delete('tasks/{task}/force-delete', [TaskController::class, 'forceDelete'])->name('tasks.forceDelete');
+
+    Route::patch('/tasks/{task}/status', [TaskController::class, 'updateTaskStatus'])->name('tasks.updateTaskStatus');
 });
 
-
 require __DIR__.'/auth.php';
+

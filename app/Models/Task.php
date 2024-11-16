@@ -38,8 +38,8 @@ class Task extends Model
 
     public function updateProgress()
     {
-        $totalSubtasks = $this->subtasks()->count();
-        $completedSubtasks = $this->subtasks()->where('status', 'done')->count();
+        $totalSubtasks = $this->subtasks()->where('is_draft',0)->count();
+        $completedSubtasks = $this->subtasks()->where('is_draft',0)->where('status', 'done')->count();
 
         if ($totalSubtasks > 0 && $totalSubtasks == $completedSubtasks) {
             $this->status = 'done';
@@ -48,5 +48,22 @@ class Task extends Model
             $this->status = 'in-progress';
             $this->save();
         }
+    }
+
+    public function scopeSearchByTitle($query, $title)
+    {
+        return $query->where('title', 'like', '%' . $title . '%');
+    }
+
+    public function scopeFilterByStatus($query, $status)
+    {
+        if ($status === 'draft') {
+            return $query->where('is_draft', true);
+        } elseif ($status === 'trash') {
+            return $query->onlyTrashed();
+        }
+
+        return $query->where('status', $status)
+                     ->where('is_draft', false);
     }
 }
